@@ -1,0 +1,140 @@
+import React from 'react';
+
+// --- ICONS (SVG) ---
+export const Icons = {
+  MapPin: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-9 13-9 13s-9-7-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>,
+  Search: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>,
+  User: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>,
+  Menu: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>,
+  ShoppingBag: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>,
+  Plus: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>,
+  Trash: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>,
+  Camera: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+};
+
+// --- COMPONENTS ---
+
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+  isLoading?: boolean;
+}
+
+export const Button: React.FC<ButtonProps> = ({ variant = 'primary', isLoading, className = '', children, ...props }) => {
+  const base = "px-4 py-2 rounded font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 flex items-center justify-center gap-2";
+  const variants = {
+    primary: "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500",
+    secondary: "bg-gray-100 text-gray-800 hover:bg-gray-200 focus:ring-gray-400",
+    danger: "bg-red-500 text-white hover:bg-red-600 focus:ring-red-400",
+    ghost: "bg-transparent hover:bg-gray-50 text-gray-600"
+  };
+
+  return (
+    <button className={`${base} ${variants[variant]} ${className} ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`} disabled={isLoading} {...props}>
+      {isLoading && (
+        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+      )}
+      {children}
+    </button>
+  );
+};
+
+export const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label?: string }> = ({ label, className = '', ...props }) => (
+  <div className="mb-3">
+    {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
+    <input className={`w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500 ${className}`} {...props} />
+  </div>
+);
+
+export const Textarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement> & { label?: string }> = ({ label, className = '', ...props }) => (
+  <div className="mb-3">
+    {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
+    <textarea className={`w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500 ${className}`} {...props} />
+  </div>
+);
+
+export const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
+  <div className={`bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden ${className}`}>
+    {children}
+  </div>
+);
+
+export const Badge: React.FC<{ children: React.ReactNode; color?: string; className?: string }> = ({ children, color = 'blue', className='' }) => (
+  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-${color}-100 text-${color}-800 ${className}`}>
+    {children}
+  </span>
+);
+
+export const Alert: React.FC<{ children: React.ReactNode; type?: 'error' | 'success' }> = ({ children, type = 'error' }) => {
+  const bg = type === 'error' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200';
+  return (
+    <div className={`p-4 rounded-md border ${bg} mb-4 text-sm`}>
+      {children}
+    </div>
+  );
+};
+
+export const StarRating: React.FC<{ rating: number; onRatingChange?: (r: number) => void; readonly?: boolean }> = ({ rating, onRatingChange, readonly = false }) => {
+  return (
+    <div className="flex text-yellow-400">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          onClick={() => !readonly && onRatingChange?.(star)}
+          className={`${readonly ? 'cursor-default' : 'cursor-pointer focus:outline-none'}`}
+          disabled={readonly}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width={readonly ? "16" : "24"} height={readonly ? "16" : "24"} fill={star <= rating ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+          </svg>
+        </button>
+      ))}
+    </div>
+  );
+};
+
+// --- NEW NOTIFICATION COMPONENTS ---
+
+export interface ToastProps {
+  id: string;
+  message: string;
+  type: 'success' | 'error' | 'info';
+  onDismiss: (id: string) => void;
+}
+
+export const Toast: React.FC<ToastProps> = ({ id, message, type, onDismiss }) => {
+  const bg = type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-green-500' : 'bg-blue-500';
+  
+  return (
+    <div className={`${bg} text-white px-4 py-3 rounded shadow-lg mb-2 flex items-center justify-between w-72 animate-slide-in`}>
+      <span className="text-sm font-medium">{message}</span>
+      <button onClick={() => onDismiss(id)} className="ml-4 text-white opacity-75 hover:opacity-100">
+        ×
+      </button>
+    </div>
+  );
+};
+
+export interface ModalProps {
+  isOpen: boolean;
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+export const ConfirmationModal: React.FC<ModalProps> = ({ isOpen, message, onConfirm, onCancel }) => {
+  if (!isOpen) return null;
+  
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black bg-opacity-50">
+      <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl">
+        <h3 className="text-lg font-bold mb-3 text-gray-900">Confirm Action</h3>
+        <p className="text-gray-600 mb-6">{message}</p>
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={onCancel}>Cancel</Button>
+          <Button variant="primary" onClick={onConfirm}>Confirm</Button>
+        </div>
+      </div>
+    </div>
+  );
+};

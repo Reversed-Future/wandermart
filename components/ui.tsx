@@ -162,7 +162,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ images, onChange, 
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
-    const files = Array.from(e.target.files);
+    const files = Array.from(e.target.files) as File[];
     e.target.value = ''; // Reset input to allow re-selecting same files
 
     if (images.length + files.length > maxCount) {

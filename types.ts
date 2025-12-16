@@ -1,3 +1,4 @@
+
 export enum UserRole {
   GUEST = 'guest',
   TRAVELER = 'traveler',
@@ -14,6 +15,7 @@ export interface User {
   status: 'active' | 'pending' | 'rejected'; // Account status
   qualificationUrl?: string; // Kept for backward compat
   qualificationUrls?: string[]; // New: multiple pages
+  avatarUrl?: string; // New: User profile picture
 }
 
 export interface Attraction {

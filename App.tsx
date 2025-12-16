@@ -11,8 +11,9 @@ interface AuthContextType {
   user: User | null;
   login: (u: User) => void;
   logout: () => void;
+  updateProfile: (u: User) => void;
 }
-const AuthContext = createContext<AuthContextType>({ user: null, login: () => {}, logout: () => {} });
+const AuthContext = createContext<AuthContextType>({ user: null, login: () => {}, logout: () => {}, updateProfile: () => {} });
 export const useAuth = () => useContext(AuthContext);
 
 interface CartContextType {
@@ -241,6 +242,32 @@ const HomePage = () => {
                   </div>
 
                   <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Tags (Select multiple)</label>
+                    <div className="flex flex-wrap gap-2">
+                        {uniqueTags.map(t => (
+                            <button 
+                                key={t}
+                                type="button"
+                                onClick={() => {
+                                    const current = suggestion.tags || [];
+                                    const newTags = current.includes(t) 
+                                        ? current.filter(tag => tag !== t)
+                                        : [...current, t];
+                                    setSuggestion({...suggestion, tags: newTags});
+                                }}
+                                className={`px-3 py-1 rounded-full text-sm border transition-colors ${
+                                    (suggestion.tags || []).includes(t)
+                                    ? 'bg-blue-600 text-white border-blue-600'
+                                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                }`}
+                            >
+                                {t}
+                            </button>
+                        ))}
+                    </div>
+                  </div>
+
+                  <div className="md:col-span-2">
                       <Textarea label="Description *" value={suggestion.description} onChange={e => setSuggestion({...suggestion, description: e.target.value})} />
                   </div>
               </div>
@@ -307,6 +334,12 @@ const AttractionDetail = () => {
   const [newPostImages, setNewPostImages] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Edit Review State
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState('');
+  const [editRating, setEditRating] = useState(0);
+  const [editImages, setEditImages] = useState<string[]>([]);
+
   useEffect(() => {
     if (id) {
       Promise.all([
@@ -351,6 +384,44 @@ const AttractionDetail = () => {
       setPosts(posts.filter(p => p.id !== postId));
       notify("Review reported. It has been hidden and sent to admins for review.", "info");
     });
+  };
+
+  const startEdit = (post: Post) => {
+    setEditingPostId(post.id);
+    setEditContent(post.content);
+    setEditRating(post.rating || 0);
+    setEditImages(post.imageUrls || (post.imageUrl ? [post.imageUrl] : []));
+  };
+
+  const cancelEdit = () => {
+    setEditingPostId(null);
+    setEditContent('');
+    setEditRating(0);
+    setEditImages([]);
+  };
+
+  const saveEdit = async () => {
+     if (!editingPostId) return;
+     const res = await API.updatePost(editingPostId, {
+         content: editContent,
+         rating: editRating,
+         imageUrls: editImages
+     });
+     if (res.success && res.data) {
+         setPosts(posts.map(p => p.id === editingPostId ? res.data! : p));
+         notify("Review updated", "success");
+         cancelEdit();
+     }
+  };
+
+  const handleDeletePost = async (postId: string) => {
+      confirm("Delete your review?", async () => {
+          const res = await API.deletePost(postId);
+          if (res.success) {
+              setPosts(posts.filter(p => p.id !== postId));
+              notify("Review deleted", "info");
+          }
+      });
   };
 
   if (loading) return <div>Loading...</div>;
@@ -468,33 +539,64 @@ const AttractionDetail = () => {
 
           <div className="space-y-6">
             {posts.length === 0 && <p className="text-gray-500 italic">No reviews yet.</p>}
-            {posts.map(post => (
-              <div key={post.id} className="border-b border-gray-100 last:border-0 pb-6">
-                <div className="flex justify-between items-start mb-2">
-                   <div className="flex items-center gap-2">
-                     <div className="bg-blue-100 p-1 rounded-full"><Icons.User /></div>
-                     <div>
+            {posts.map(post => {
+              const isOwner = user?.id === post.userId;
+              
+              if (editingPostId === post.id) {
+                return (
+                  <div key={post.id} className="border-b border-gray-100 last:border-0 pb-6 bg-gray-50 p-4 rounded-lg">
+                    <h3 className="text-sm font-bold mb-2">Edit Review</h3>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-sm font-medium">Rating:</span>
+                      <StarRating rating={editRating} onRatingChange={setEditRating} />
+                    </div>
+                    <Textarea value={editContent} onChange={e => setEditContent(e.target.value)} />
+                    <ImageUploader images={editImages} onChange={setEditImages} maxCount={5} />
+                    <div className="flex justify-end gap-2 mt-3">
+                      <Button variant="ghost" onClick={cancelEdit} className="text-xs">Cancel</Button>
+                      <Button onClick={saveEdit} className="text-xs">Save Changes</Button>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div key={post.id} className="border-b border-gray-100 last:border-0 pb-6">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="bg-blue-100 p-1 rounded-full"><Icons.User /></div>
+                      <div>
                         <div className="font-medium text-sm flex items-center gap-2">
-                            {post.username}
-                            {post.rating && <StarRating rating={post.rating} readonly />}
+                          {post.username}
+                          {post.rating && <StarRating rating={post.rating} readonly />}
                         </div>
                         <div className="text-xs text-gray-400">{new Date(post.createdAt).toLocaleDateString()}</div>
-                     </div>
-                   </div>
-                   {user && <button onClick={() => handleReport(post.id)} className="text-xs text-gray-400 hover:text-red-500 underline">Report</button>}
-                </div>
-                <p className="text-gray-700 leading-relaxed">{post.content}</p>
-                {post.imageUrls && post.imageUrls.length > 0 && (
-                    <div className="mt-3 flex gap-2 flex-wrap">
-                        {post.imageUrls.map((url, idx) => (
-                            <img key={idx} src={url} alt="User upload" className="w-24 h-24 object-cover rounded-lg border border-gray-100 cursor-pointer hover:opacity-90" />
-                        ))}
+                      </div>
                     </div>
-                )}
-                {/* Fallback for old single image */}
-                {!post.imageUrls && post.imageUrl && <img src={post.imageUrl} alt="User upload" className="mt-3 w-48 h-48 object-cover rounded-lg border border-gray-100" />}
-              </div>
-            ))}
+                    <div className="flex gap-2 text-xs">
+                      {isOwner ? (
+                        <>
+                          <button onClick={() => startEdit(post)} className="text-blue-600 hover:underline font-medium">Edit</button>
+                          <button onClick={() => handleDeletePost(post.id)} className="text-red-500 hover:underline font-medium">Delete</button>
+                        </>
+                      ) : (
+                        user && <button onClick={() => handleReport(post.id)} className="text-gray-400 hover:text-red-500 underline">Report</button>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-gray-700 leading-relaxed">{post.content}</p>
+                  {post.imageUrls && post.imageUrls.length > 0 && (
+                    <div className="mt-3 flex gap-2 flex-wrap">
+                      {post.imageUrls.map((url, idx) => (
+                        <img key={idx} src={url} alt="User upload" className="w-24 h-24 object-cover rounded-lg border border-gray-100 cursor-pointer hover:opacity-90" />
+                      ))}
+                    </div>
+                  )}
+                  {/* Fallback for old single image */}
+                  {!post.imageUrls && post.imageUrl && <img src={post.imageUrl} alt="User upload" className="mt-3 w-48 h-48 object-cover rounded-lg border border-gray-100" />}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -1236,6 +1338,31 @@ const AdminDashboard = () => {
                           </div>
 
                           <div className="md:col-span-2">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
+                            <div className="flex flex-wrap gap-2">
+                                {uniqueTags.map(t => (
+                                    <button 
+                                        key={t}
+                                        onClick={() => {
+                                            const current = editingAttr?.tags || [];
+                                            const newTags = current.includes(t) 
+                                                ? current.filter(tag => tag !== t)
+                                                : [...current, t];
+                                            setEditingAttr({...editingAttr, tags: newTags});
+                                        }}
+                                        className={`px-3 py-1 rounded-full text-sm border transition-colors ${
+                                            (editingAttr?.tags || []).includes(t)
+                                            ? 'bg-blue-600 text-white border-blue-600'
+                                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                        {t}
+                                    </button>
+                                ))}
+                            </div>
+                          </div>
+
+                          <div className="md:col-span-2">
                              <Textarea label="Description" value={editingAttr?.description} onChange={e => setEditingAttr({...editingAttr, description: e.target.value})} />
                           </div>
                       </div>
@@ -1316,7 +1443,7 @@ const UserOrders = () => {
 
 // --- APP ROOT COMPONENT ---
 
-const ProtectedRoute = ({ children, roles }: { children: React.ReactNode, roles?: UserRole[] }) => {
+const ProtectedRoute = ({ children, roles }: { children?: React.ReactNode, roles?: UserRole[] }) => {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
   if (roles && !roles.includes(user.role)) return <Navigate to="/" replace />;
@@ -1338,6 +1465,11 @@ const App = () => {
   const logout = () => {
     setUser(null);
     localStorage.removeItem('user');
+  };
+
+  const updateProfile = (u: User) => {
+    setUser(u);
+    localStorage.setItem('user', JSON.stringify(u));
   };
 
   // Cart State
@@ -1383,7 +1515,7 @@ const App = () => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, updateProfile }}>
       <CartContext.Provider value={{ cart, addToCart, removeFromCart, clearCart }}>
         <NotificationContext.Provider value={{ notify, confirm }}>
           <HashRouter>

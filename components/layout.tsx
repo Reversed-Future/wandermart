@@ -1,8 +1,89 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth, useCart } from '../App';
-import { Icons, Button } from './ui';
+import { useAuth, useCart, useNotification } from '../App';
+import { Icons, Button, Input, Card, ImageUploader, Badge } from './ui';
 import { UserRole } from '../types';
+import * as API from '../services/api';
+
+const ProfileModal = ({ onClose }: { onClose: () => void }) => {
+    const { user, updateProfile } = useAuth();
+    const { notify } = useNotification();
+    const [formData, setFormData] = useState({ 
+        username: user?.username || '', 
+        email: user?.email || '',
+    });
+    const [avatars, setAvatars] = useState<string[]>(user?.avatarUrl ? [user.avatarUrl] : []);
+    const [isSaving, setIsSaving] = useState(false);
+
+    if (!user) return null;
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        const avatarUrl = avatars.length > 0 ? avatars[0] : undefined;
+        const res = await API.updateUser(user.id, { 
+            username: formData.username, 
+            email: formData.email,
+            avatarUrl 
+        });
+        
+        if (res.success && res.data) {
+            updateProfile(res.data);
+            notify("Profile updated successfully", "success");
+            onClose();
+        } else {
+            notify(res.message || "Failed to update profile", "error");
+        }
+        setIsSaving(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black bg-opacity-50">
+            <Card className="max-w-md w-full mx-4 p-6 relative">
+                <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><Icons.X /></button>
+                <h2 className="text-xl font-bold mb-4">Edit Profile</h2>
+                
+                <div className="space-y-4">
+                    <div className="flex justify-center mb-6">
+                        <div className="relative">
+                            <ImageUploader 
+                                images={avatars}
+                                onChange={setAvatars}
+                                maxCount={1}
+                                label=""
+                            />
+                            {avatars.length === 0 && (
+                                <div className="absolute top-0 left-0 w-24 h-24 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 pointer-events-none">
+                                    <Icons.User />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <Input label="Username" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} />
+                    <Input label="Email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+
+                    {user.role === UserRole.MERCHANT && (
+                         <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                             <h4 className="font-bold text-gray-700 mb-2 text-sm">Merchant Verification Status</h4>
+                             <div className="flex justify-between items-center">
+                                 <span className="text-sm text-gray-600">License Audit:</span>
+                                 <Badge color={user.status === 'active' ? 'green' : user.status === 'rejected' ? 'red' : 'yellow'}>
+                                     {user.status.toUpperCase()}
+                                 </Badge>
+                             </div>
+                             {user.status === 'rejected' && <p className="text-xs text-red-500 mt-2">Your application was rejected. Please contact support.</p>}
+                         </div>
+                    )}
+
+                    <div className="flex justify-end gap-2 mt-6">
+                        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+                        <Button onClick={handleSave} isLoading={isSaving}>Save Changes</Button>
+                    </div>
+                </div>
+            </Card>
+        </div>
+    );
+};
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, logout } = useAuth();
@@ -10,6 +91,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const navigate = useNavigate();
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -58,9 +140,21 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
               {user ? (
                 <div className="hidden md:flex items-center gap-4">
-                  <div className="flex flex-col items-end">
-                    <span className="text-sm font-medium text-gray-800">{user.username}</span>
-                    <span className="text-xs text-gray-500 capitalize">{user.role}</span>
+                  <div 
+                      className="flex flex-col items-end cursor-pointer hover:bg-gray-50 px-2 py-1 rounded transition-colors"
+                      onClick={() => setIsProfileOpen(true)}
+                  >
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-800">{user.username}</span>
+                        {user.avatarUrl ? (
+                            <img src={user.avatarUrl} alt="Avatar" className="w-8 h-8 rounded-full object-cover border border-gray-200" />
+                        ) : (
+                            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                                <Icons.User />
+                            </div>
+                        )}
+                    </div>
+                    <span className="text-xs text-gray-500 capitalize mr-10">{user.role}</span>
                   </div>
                   <Button variant="secondary" onClick={handleLogout} className="text-sm">Logout</Button>
                 </div>
@@ -87,7 +181,24 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
              {user?.role === UserRole.MERCHANT && <Link to="/merchant" className="block text-blue-600 font-medium" onClick={() => setIsMenuOpen(false)}>Store Dashboard</Link>}
              {user?.role === UserRole.ADMIN && <Link to="/admin" className="block text-blue-600 font-medium" onClick={() => setIsMenuOpen(false)}>Admin Panel</Link>}
              {showShoppingFeatures && user && <Link to="/orders" className="block text-gray-700" onClick={() => setIsMenuOpen(false)}>My Orders</Link>}
-             <div className="pt-2 border-t border-gray-100 flex flex-col gap-2">
+             
+             {user && (
+                 <div className="py-2 border-t border-b border-gray-100 my-2">
+                     <button onClick={() => { setIsProfileOpen(true); setIsMenuOpen(false); }} className="flex items-center gap-2 w-full text-left py-2">
+                         {user.avatarUrl ? (
+                            <img src={user.avatarUrl} alt="Avatar" className="w-8 h-8 rounded-full object-cover" />
+                         ) : (
+                            <div className="bg-blue-100 p-1 rounded-full"><Icons.User /></div>
+                         )}
+                         <div>
+                             <div className="font-medium">{user.username}</div>
+                             <div className="text-xs text-gray-500">Edit Profile</div>
+                         </div>
+                     </button>
+                 </div>
+             )}
+
+             <div className="pt-2 flex flex-col gap-2">
                {!user ? (
                  <>
                   <Link to="/login" onClick={() => setIsMenuOpen(false)} className="w-full text-center py-2 border rounded">Login</Link>
@@ -101,6 +212,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         )}
       </header>
       
+      {isProfileOpen && <ProfileModal onClose={() => setIsProfileOpen(false)} />}
+
       <main className="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {children}
       </main>

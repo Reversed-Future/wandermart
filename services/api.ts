@@ -153,9 +153,9 @@ const MOCK_PRODUCTS: Product[] = [
 
 // Seed some initial users if not present
 const INITIAL_USERS: User[] = [
-  { id: 'admin1', username: 'Admin User', email: 'admin@test.com', role: UserRole.ADMIN, status: 'active' },
-  { id: 'm1', username: 'Merchant User', email: 'merchant@test.com', role: UserRole.MERCHANT, status: 'active', qualificationUrl: 'https://picsum.photos/200/300', qualificationUrls: ['https://picsum.photos/200/300'] },
-  { id: 'u1', username: 'Traveler User', email: 'user@test.com', role: UserRole.TRAVELER, status: 'active' },
+  { id: 'admin1', username: 'Admin User', email: 'admin@test.com', role: UserRole.ADMIN, status: 'active', avatarUrl: 'https://i.pravatar.cc/150?u=admin' },
+  { id: 'm1', username: 'Merchant User', email: 'merchant@test.com', role: UserRole.MERCHANT, status: 'active', qualificationUrl: 'https://picsum.photos/200/300', qualificationUrls: ['https://picsum.photos/200/300'], avatarUrl: 'https://i.pravatar.cc/150?u=merchant' },
+  { id: 'u1', username: 'Traveler User', email: 'user@test.com', role: UserRole.TRAVELER, status: 'active', avatarUrl: 'https://i.pravatar.cc/150?u=traveler' },
 ];
 
 // --- AUTH SERVICES ---
@@ -198,11 +198,26 @@ export const register = async (userData: Partial<User>, password: string): Promi
     status: status,
     qualificationUrl: qualificationUrls[0], // Primary
     qualificationUrls: qualificationUrls,
-    token: `mock-jwt-new`
+    token: `mock-jwt-new`,
+    avatarUrl: `https://i.pravatar.cc/150?u=${Date.now()}` // Default avatar
   };
 
   setStorage('mock_users', [...users, newUser]);
   return { success: true, data: newUser };
+};
+
+export const updateUser = async (id: string, updates: Partial<User>): Promise<ApiResponse<User>> => {
+  await delay(DELAY_MS);
+  const users = getStorage<User[]>('mock_users', INITIAL_USERS);
+  const index = users.findIndex(u => u.id === id);
+  if (index === -1) return { success: false, message: 'User not found' };
+
+  // Allow updating allowed fields. In a real app, email/role updates might be restricted or require verification.
+  const updatedUser = { ...users[index], ...updates };
+  users[index] = updatedUser;
+  setStorage('mock_users', users);
+  
+  return { success: true, data: updatedUser };
 };
 
 export const getPendingMerchants = async (): Promise<ApiResponse<User[]>> => {
@@ -370,6 +385,32 @@ export const createPost = async (postData: Partial<Post>): Promise<ApiResponse<P
   const posts = getStorage<Post[]>('mock_posts', []);
   setStorage('mock_posts', [newPost, ...posts]);
   return { success: true, data: newPost };
+};
+
+export const updatePost = async (id: string, updates: Partial<Post>): Promise<ApiResponse<Post>> => {
+  await delay(DELAY_MS);
+  const posts = getStorage<Post[]>('mock_posts', []);
+  const index = posts.findIndex(p => p.id === id);
+  if (index === -1) return { success: false, message: 'Post not found' };
+
+  const updatedPost = { ...posts[index], ...updates };
+  
+  // Update legacy field if image urls change
+  if (updates.imageUrls) {
+      updatedPost.imageUrl = updates.imageUrls.length > 0 ? updates.imageUrls[0] : undefined;
+  }
+
+  posts[index] = updatedPost;
+  setStorage('mock_posts', posts);
+  return { success: true, data: updatedPost };
+};
+
+export const deletePost = async (id: string): Promise<ApiResponse<boolean>> => {
+  await delay(DELAY_MS);
+  let posts = getStorage<Post[]>('mock_posts', []);
+  posts = posts.filter(p => p.id !== id);
+  setStorage('mock_posts', posts);
+  return { success: true, data: true };
 };
 
 export const reportPost = async (postId: string): Promise<ApiResponse<boolean>> => {

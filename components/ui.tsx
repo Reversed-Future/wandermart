@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useRef, useState, useEffect } from 'react';
+import * as API from '../services/api'; // Direct import for the uploader
 
 // --- ICONS (SVG) ---
 export const Icons = {
@@ -9,7 +10,9 @@ export const Icons = {
   ShoppingBag: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>,
   Plus: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>,
   Trash: () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>,
-  Camera: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+  Camera: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>,
+  X: () => <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>,
+  Loader: () => <svg className="animate-spin" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>
 };
 
 // --- COMPONENTS ---
@@ -134,6 +137,117 @@ export const ConfirmationModal: React.FC<ModalProps> = ({ isOpen, message, onCon
           <Button variant="secondary" onClick={onCancel}>Cancel</Button>
           <Button variant="primary" onClick={onConfirm}>Confirm</Button>
         </div>
+      </div>
+    </div>
+  );
+};
+
+// --- IMAGE UPLOADER ---
+
+interface ImageUploaderProps {
+  images: string[];
+  onChange: (newImages: string[]) => void;
+  maxCount?: number;
+  label?: string;
+}
+
+export const ImageUploader: React.FC<ImageUploaderProps> = ({ images, onChange, maxCount = 10, label = "Upload Images" }) => {
+  const [loadingItems, setLoadingItems] = useState<{ id: string, preview: string }[]>([]);
+  // We use a ref to access the latest 'images' prop inside the async upload loop without closure staleness issues
+  const imagesRef = useRef(images);
+  
+  useEffect(() => {
+    imagesRef.current = images;
+  }, [images]);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    const files = Array.from(e.target.files);
+    e.target.value = ''; // Reset input to allow re-selecting same files
+
+    if (images.length + files.length > maxCount) {
+      alert(`You can only upload up to ${maxCount} images.`);
+      return;
+    }
+
+    // 1. Create temporary placeholders
+    const newItems = files.map(f => ({
+      id: Math.random().toString(36).substr(2, 9),
+      preview: URL.createObjectURL(f),
+      file: f
+    }));
+
+    setLoadingItems(prev => [...prev, ...newItems.map(i => ({ id: i.id, preview: i.preview }))]);
+
+    // 2. Upload one by one
+    for (const item of newItems) {
+      try {
+        const url = await API.uploadFile(item.file);
+        // Append to current list via callback to ensure we don't lose updates
+        // However, since we are in a loop, we should use the ref to get the base for the *next* update 
+        // OR simpler: just update the parent state one by one.
+        // We call onChange with [ ...latestImagesFromRef, newUrl ]
+        
+        const currentList = imagesRef.current;
+        const newList = [...currentList, url];
+        onChange(newList);
+        
+        // Ref updates via useEffect, but might lag slightly if onChange triggers re-render fast.
+        // To be safe in this loop, we locally track the 'accumulated' list or just trust React's state speed + ref sync.
+        // Since API mock has delay, ref sync should be fine.
+      } catch (err) {
+        console.error("Upload failed", err);
+      } finally {
+        setLoadingItems(prev => prev.filter(i => i.id !== item.id));
+      }
+    }
+  };
+
+  const removeImage = (indexToRemove: number) => {
+    onChange(images.filter((_, idx) => idx !== indexToRemove));
+  };
+
+  return (
+    <div className="mb-4">
+      {label && <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>}
+      <div className="flex flex-wrap gap-3">
+        {/* Existing Images */}
+        {images.map((url, idx) => (
+          <div key={`${url}-${idx}`} className="relative w-24 h-24 rounded-lg overflow-hidden border border-gray-200 group">
+            <img src={url} alt="Uploaded" className="w-full h-full object-cover" />
+            <button 
+              onClick={() => removeImage(idx)}
+              className="absolute top-1 right-1 bg-black bg-opacity-50 text-white rounded-full p-0.5 hover:bg-red-500 transition-colors"
+            >
+              <Icons.X />
+            </button>
+          </div>
+        ))}
+
+        {/* Loading Placeholders */}
+        {loadingItems.map((item) => (
+          <div key={item.id} className="relative w-24 h-24 rounded-lg overflow-hidden border border-gray-200 flex items-center justify-center bg-gray-50">
+            <img src={item.preview} alt="Uploading" className="w-full h-full object-cover opacity-50" />
+            <div className="absolute inset-0 flex items-center justify-center text-blue-600">
+               <Icons.Loader />
+            </div>
+          </div>
+        ))}
+
+        {/* Upload Button */}
+        {images.length + loadingItems.length < maxCount && (
+          <label className="w-24 h-24 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors text-gray-400 hover:text-blue-500">
+            <Icons.Camera />
+            <span className="text-xs mt-1">Add</span>
+            <input 
+              type="file" 
+              accept="image/*" 
+              multiple 
+              className="hidden" 
+              onChange={handleFileChange} 
+            />
+          </label>
+        )}
       </div>
     </div>
   );

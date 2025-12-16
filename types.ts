@@ -12,7 +12,8 @@ export interface User {
   role: UserRole;
   token?: string;
   status: 'active' | 'pending' | 'rejected'; // Account status
-  qualificationUrl?: string; // For merchants
+  qualificationUrl?: string; // Kept for backward compat
+  qualificationUrls?: string[]; // New: multiple pages
 }
 
 export interface Attraction {
@@ -25,8 +26,9 @@ export interface Attraction {
   city?: string;
   county?: string;
   tags: string[];
-  imageUrl: string;
-  gallery?: string[]; // Additional photos
+  imageUrl: string; // Primary cover image
+  imageUrls?: string[]; // All images including cover
+  gallery?: string[]; // Legacy field, mapped to imageUrls slice(1)
   openHours?: string;
   drivingTips?: string;
   status: 'active' | 'pending' | 'rejected'; // New field for approval workflow
@@ -40,7 +42,8 @@ export interface Post {
   username: string;
   content: string;
   rating?: number; // 1-5 star rating
-  imageUrl?: string;
+  imageUrl?: string; // Legacy single image
+  imageUrls?: string[]; // New: multiple images
   likes: number;
   comments: Comment[];
   createdAt: string;
@@ -65,7 +68,8 @@ export interface Product {
   description: string;
   price: number;
   stock: number;
-  imageUrl: string;
+  imageUrl: string; // Primary
+  imageUrls?: string[]; // Multiple
 }
 
 export interface CartItem extends Product {

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, Link, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Layout } from './components/layout';
-import { Button, Input, Card, Badge, Icons, Alert, Textarea, StarRating, Toast, ConfirmationModal } from './components/ui';
+import { Button, Input, Card, Badge, Icons, Alert, Textarea, StarRating, Toast, ConfirmationModal, ImageUploader } from './components/ui';
 import * as API from './services/api';
 import { User, UserRole, Attraction, Post, Product, CartItem, Order } from './types';
 
@@ -69,7 +69,7 @@ const HomePage = () => {
   const [suggestion, setSuggestion] = useState<Partial<Attraction>>({
     title: '', description: '', address: '', province: '', city: '', county: '', tags: []
   });
-  const [suggestionImage, setSuggestionImage] = useState<File | null>(null);
+  const [suggestionImages, setSuggestionImages] = useState<string[]>([]);
 
   // Read state from URL
   const query = searchParams.get('q') || '';
@@ -121,16 +121,9 @@ const HomePage = () => {
         return;
     }
 
-    let imageUrl = '';
-    if (suggestionImage) {
-        imageUrl = await API.uploadFile(suggestionImage);
-    } else {
-        imageUrl = `https://picsum.photos/800/600?random=${Date.now()}`;
-    }
-
     const res = await API.createAttraction({
         ...suggestion,
-        imageUrl,
+        imageUrls: suggestionImages,
         submittedBy: user?.username,
         status: 'pending'
     });
@@ -139,7 +132,7 @@ const HomePage = () => {
         notify("Attraction submitted successfully! It is pending admin approval.", "success");
         setIsSuggesting(false);
         setSuggestion({ title: '', description: '', address: '', province: '', city: '', county: '', tags: [] });
-        setSuggestionImage(null);
+        setSuggestionImages([]);
     }
   };
 
@@ -239,9 +232,12 @@ const HomePage = () => {
                   <Input label="City" value={suggestion.city} onChange={e => setSuggestion({...suggestion, city: e.target.value})} placeholder="e.g. 成都市" />
                   <Input label="County" value={suggestion.county} onChange={e => setSuggestion({...suggestion, county: e.target.value})} />
                   
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Upload Photo</label>
-                    <input type="file" onChange={e => setSuggestionImage(e.target.files?.[0] || null)} className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                  <div className="md:col-span-2">
+                     <ImageUploader 
+                       images={suggestionImages}
+                       onChange={setSuggestionImages}
+                       label="Upload Photos (First image will be cover)"
+                     />
                   </div>
 
                   <div className="md:col-span-2">
@@ -308,7 +304,7 @@ const AttractionDetail = () => {
   // New Review Form State
   const [newPostContent, setNewPostContent] = useState('');
   const [newRating, setNewRating] = useState(5);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [newPostImages, setNewPostImages] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -330,25 +326,20 @@ const AttractionDetail = () => {
     if (!newPostContent.trim() || !user || !id) return;
     setIsSubmitting(true);
     
-    let uploadedImageUrl = '';
-    if (selectedFile) {
-        uploadedImageUrl = await API.uploadFile(selectedFile);
-    }
-
     const res = await API.createPost({
       attractionId: id,
       userId: user.id,
       username: user.username,
       content: newPostContent,
       rating: newRating,
-      imageUrl: uploadedImageUrl
+      imageUrls: newPostImages
     });
 
     if (res.success && res.data) {
       setPosts([res.data, ...posts]);
       setNewPostContent('');
       setNewRating(5);
-      setSelectedFile(null);
+      setNewPostImages([]);
       notify("Review posted successfully!", "success");
     }
     setIsSubmitting(false);
@@ -461,15 +452,13 @@ const AttractionDetail = () => {
                 value={newPostContent} 
                 onChange={e => setNewPostContent(e.target.value)} 
               />
-              <div className="flex justify-between items-center">
-                 <div className="flex items-center gap-2">
-                     <label className="cursor-pointer flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800">
-                         <Icons.Camera />
-                         <span>{selectedFile ? selectedFile.name : 'Add Photo'}</span>
-                         <input type="file" accept="image/*" className="hidden" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} />
-                     </label>
-                     {selectedFile && <button onClick={() => setSelectedFile(null)} className="text-xs text-red-500"><Icons.Trash/></button>}
-                 </div>
+              <ImageUploader 
+                 images={newPostImages}
+                 onChange={setNewPostImages}
+                 maxCount={5}
+                 label="Add Photos"
+              />
+              <div className="flex justify-end items-center mt-2">
                  <Button onClick={handlePostSubmit} disabled={!newPostContent || isSubmitting} isLoading={isSubmitting}>Post Review</Button>
               </div>
             </div>
@@ -495,7 +484,15 @@ const AttractionDetail = () => {
                    {user && <button onClick={() => handleReport(post.id)} className="text-xs text-gray-400 hover:text-red-500 underline">Report</button>}
                 </div>
                 <p className="text-gray-700 leading-relaxed">{post.content}</p>
-                {post.imageUrl && <img src={post.imageUrl} alt="User upload" className="mt-3 w-48 h-48 object-cover rounded-lg border border-gray-100" />}
+                {post.imageUrls && post.imageUrls.length > 0 && (
+                    <div className="mt-3 flex gap-2 flex-wrap">
+                        {post.imageUrls.map((url, idx) => (
+                            <img key={idx} src={url} alt="User upload" className="w-24 h-24 object-cover rounded-lg border border-gray-100 cursor-pointer hover:opacity-90" />
+                        ))}
+                    </div>
+                )}
+                {/* Fallback for old single image */}
+                {!post.imageUrls && post.imageUrl && <img src={post.imageUrl} alt="User upload" className="mt-3 w-48 h-48 object-cover rounded-lg border border-gray-100" />}
               </div>
             ))}
           </div>
@@ -567,11 +564,15 @@ const ProductDetail = () => {
   const { user } = useAuth();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedImage, setSelectedImage] = useState<string>('');
 
   useEffect(() => {
     if (id) {
       API.getProductById(id).then(res => {
-        if (res.data) setProduct(res.data);
+        if (res.data) {
+            setProduct(res.data);
+            setSelectedImage(res.data.imageUrl);
+        }
         setLoading(false);
       });
     }
@@ -584,7 +585,21 @@ const ProductDetail = () => {
     <div className="max-w-4xl mx-auto">
        <Link to="/products" className="text-gray-500 hover:text-blue-600 mb-4 inline-block">&larr; Back to Marketplace</Link>
        <div className="grid md:grid-cols-2 gap-8 bg-white p-6 rounded-xl shadow-sm">
-         <img src={product.imageUrl} alt={product.name} className="w-full h-80 object-cover rounded-lg" />
+         <div className="flex flex-col gap-4">
+             <img src={selectedImage || product.imageUrl} alt={product.name} className="w-full h-80 object-cover rounded-lg" />
+             {product.imageUrls && product.imageUrls.length > 1 && (
+                 <div className="flex gap-2 overflow-x-auto pb-2">
+                     {product.imageUrls.map((url, idx) => (
+                         <img 
+                            key={idx} 
+                            src={url} 
+                            onClick={() => setSelectedImage(url)} 
+                            className={`w-20 h-20 object-cover rounded cursor-pointer border-2 ${selectedImage === url ? 'border-blue-600' : 'border-transparent'}`} 
+                        />
+                     ))}
+                 </div>
+             )}
+         </div>
          <div className="flex flex-col">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">{product.name}</h1>
             <div className="flex flex-col gap-1 mb-6 border-b border-gray-100 pb-4">
@@ -684,7 +699,7 @@ const AuthPage: React.FC<{ type: 'login' | 'register' }> = ({ type }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState(UserRole.TRAVELER); // Only for register
-  const [qualificationFile, setQualificationFile] = useState<File | null>(null);
+  const [qualificationUrls, setQualificationUrls] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -700,22 +715,17 @@ const AuthPage: React.FC<{ type: 'login' | 'register' }> = ({ type }) => {
       if (type === 'login') {
         res = await API.login(email, password);
       } else {
-        if (role === UserRole.MERCHANT && !qualificationFile) {
-            setError('Merchants must upload a qualification document (e.g., Business License).');
+        if (role === UserRole.MERCHANT && qualificationUrls.length === 0) {
+            setError('Merchants must upload at least one qualification document.');
             setLoading(false);
             return;
-        }
-
-        let qualUrl = '';
-        if (qualificationFile) {
-            qualUrl = await API.uploadFile(qualificationFile);
         }
 
         res = await API.register({ 
             email, 
             username: email.split('@')[0], 
             role, 
-            qualificationUrl: qualUrl 
+            qualificationUrls: qualificationUrls
         }, password);
       }
 
@@ -753,14 +763,13 @@ const AuthPage: React.FC<{ type: 'login' | 'register' }> = ({ type }) => {
                
                {role === UserRole.MERCHANT && (
                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Business License / Qualification</label>
-                    <input 
-                        type="file" 
-                        accept="image/*" 
-                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
-                        onChange={(e) => setQualificationFile(e.target.files?.[0] || null)}
+                    <ImageUploader 
+                      images={qualificationUrls}
+                      onChange={setQualificationUrls}
+                      label="Business License / Qualifications"
+                      maxCount={3}
                     />
-                    <p className="text-xs text-gray-500 mt-1">Upload an image of your business license for admin approval.</p>
+                    <p className="text-xs text-gray-500 mt-1">Upload images of your business license for approval.</p>
                  </div>
                )}
              </div>
@@ -800,7 +809,7 @@ const MerchantDashboard = () => {
   
   // New Product Form State
   const [newItem, setNewItem] = useState<Partial<Product>>({ name: '', price: 0, stock: 1, description: '', attractionId: '' });
-  const [productImage, setProductImage] = useState<File | null>(null);
+  const [newItemImages, setNewItemImages] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [trackingInputs, setTrackingInputs] = useState<Record<string, string>>({});
 
@@ -839,25 +848,19 @@ const MerchantDashboard = () => {
 
   const handleAddProduct = async () => {
     setUploading(true);
-    let imageUrl = newItem.imageUrl;
-    if (productImage) {
-        imageUrl = await API.uploadFile(productImage);
-    } else if (!imageUrl) {
-        imageUrl = `https://picsum.photos/400/400?random=${Date.now()}`; 
-    }
-
+    
     const res = await API.createProduct({ 
         ...newItem, 
         merchantId: user.id, 
         merchantName: user.username,
-        imageUrl
+        imageUrls: newItemImages
     });
     
     if (res.success && res.data) {
       setProducts([...products, res.data]);
       setIsAdding(false);
       setNewItem({ name: '', price: 0, stock: 1, description: '', attractionId: '' });
-      setProductImage(null);
+      setNewItemImages([]);
       notify("Product added successfully", "success");
     }
     setUploading(false);
@@ -892,12 +895,10 @@ const MerchantDashboard = () => {
              <Input label="Price" type="number" value={newItem.price} onChange={e => setNewItem({...newItem, price: parseFloat(e.target.value)})} />
              <Input label="Stock" type="number" value={newItem.stock} onChange={e => setNewItem({...newItem, stock: parseInt(e.target.value)})} />
              <div className="md:col-span-2">
-               <label className="block text-sm font-medium text-gray-700 mb-1">Product Image</label>
-               <input 
-                  type="file" 
-                  accept="image/*" 
-                  className="w-full border border-gray-300 rounded px-3 py-2 bg-white"
-                  onChange={e => setProductImage(e.target.files?.[0] || null)}
+               <ImageUploader 
+                 images={newItemImages}
+                 onChange={setNewItemImages}
+                 label="Product Images"
                />
              </div>
              <div className="md:col-span-2">
@@ -1010,7 +1011,7 @@ const AdminDashboard = () => {
   // Attraction Form State
   const [editingAttr, setEditingAttr] = useState<Partial<Attraction> | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [attrImageFile, setAttrImageFile] = useState<File | null>(null);
+  const [editingImages, setEditingImages] = useState<string[]>([]);
 
   useEffect(() => {
     API.getReportedContent().then(res => res.data && setReports(res.data));
@@ -1050,13 +1051,8 @@ const AdminDashboard = () => {
 
   const handleSaveAttraction = async () => {
       if (!editingAttr) return;
-      
-      let imageUrl = editingAttr.imageUrl;
-      if (attrImageFile) {
-          imageUrl = await API.uploadFile(attrImageFile);
-      }
 
-      const payload = { ...editingAttr, imageUrl };
+      const payload = { ...editingAttr, imageUrls: editingImages };
 
       if (editingAttr.id) {
           // Update
@@ -1073,7 +1069,7 @@ const AdminDashboard = () => {
       }
       setIsEditing(false);
       setEditingAttr(null);
-      setAttrImageFile(null);
+      setEditingImages([]);
       notify("Attraction saved successfully", "success");
   };
 
@@ -1087,6 +1083,7 @@ const AdminDashboard = () => {
 
   const openEdit = (attr?: Attraction) => {
       setEditingAttr(attr || { title: '', description: '', address: '', province: '', city: '', county: '', tags: [] });
+      setEditingImages(attr?.imageUrls || (attr?.imageUrl ? [attr.imageUrl] : []));
       setIsEditing(true);
   };
 
@@ -1132,10 +1129,11 @@ const AdminDashboard = () => {
                      <span className="text-sm text-gray-500">By {post.username}</span>
                    </div>
                    <p className="my-3 bg-gray-50 p-2 rounded">{post.content}</p>
-                   {post.imageUrl && (
-                     <div className="mb-3">
-                        <span className="text-xs font-semibold text-gray-500 mb-1 block">Attached Image:</span>
-                        <img src={post.imageUrl} alt="Reported content" className="h-32 w-auto object-cover rounded border" />
+                   {post.imageUrls && post.imageUrls.length > 0 && (
+                     <div className="mb-3 flex gap-2">
+                        {post.imageUrls.map((url, i) => (
+                             <img key={i} src={url} alt="Reported content" className="h-20 w-20 object-cover rounded border" />
+                        ))}
                      </div>
                    )}
                    <div className="flex gap-2">
@@ -1156,12 +1154,13 @@ const AdminDashboard = () => {
                       {pendingMerchants.map(user => (
                           <Card key={user.id} className="p-6">
                               <div className="flex flex-col md:flex-row gap-6">
-                                  {user.qualificationUrl && (
-                                      <div className="w-full md:w-1/3">
-                                          <p className="text-sm font-bold mb-2 text-gray-500">Qualification Document</p>
-                                          <a href={user.qualificationUrl} target="_blank" rel="noreferrer">
-                                            <img src={user.qualificationUrl} alt="License" className="w-full h-48 object-cover rounded border hover:opacity-90" />
-                                          </a>
+                                  {user.qualificationUrls && (
+                                      <div className="w-full md:w-1/3 flex flex-wrap gap-2">
+                                          {user.qualificationUrls.map((url, idx) => (
+                                              <a key={idx} href={url} target="_blank" rel="noreferrer">
+                                                <img src={url} alt="License" className="w-24 h-24 object-cover rounded border hover:opacity-90" />
+                                              </a>
+                                          ))}
                                       </div>
                                   )}
                                   <div className="flex-grow">
@@ -1196,6 +1195,13 @@ const AdminDashboard = () => {
                                   </div>
                                   <div className="text-sm text-gray-500 mb-2">{attr.province} {attr.city} {attr.county}</div>
                                   <p className="text-sm text-gray-700 mb-3">{attr.description}</p>
+                                  {attr.imageUrls && attr.imageUrls.length > 1 && (
+                                      <div className="flex gap-1 mb-3">
+                                          {attr.imageUrls.slice(1).map((u, i) => (
+                                              <img key={i} src={u} className="w-12 h-12 rounded object-cover" alt="thumb" />
+                                          ))}
+                                      </div>
+                                  )}
                                   <div className="flex gap-2">
                                       <Button className="text-sm py-1 bg-green-600 hover:bg-green-700" onClick={() => handleAttractionApproval(attr.id, 'approve')}>Approve & Publish</Button>
                                       <Button variant="danger" className="text-sm py-1" onClick={() => handleAttractionApproval(attr.id, 'reject')}>Reject</Button>
@@ -1222,9 +1228,11 @@ const AdminDashboard = () => {
                           <Input label="County" value={editingAttr?.county} onChange={e => setEditingAttr({...editingAttr, county: e.target.value})} />
                           
                           <div className="md:col-span-2">
-                              <label className="block text-sm font-medium text-gray-700 mb-1">Cover Image</label>
-                              <input type="file" onChange={e => setAttrImageFile(e.target.files?.[0] || null)} className="mb-2" />
-                              {editingAttr?.imageUrl && <img src={editingAttr.imageUrl} className="h-20 w-auto" alt="preview" />}
+                             <ImageUploader 
+                               images={editingImages}
+                               onChange={setEditingImages}
+                               label="Photos"
+                             />
                           </div>
 
                           <div className="md:col-span-2">

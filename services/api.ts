@@ -35,6 +35,7 @@ const MOCK_ATTRACTIONS: Attraction[] = [
     region: '四川省 成都市',
     tags: ['Nature', 'Animals', 'Family'],
     imageUrl: 'https://picsum.photos/800/600?random=1',
+    imageUrls: ['https://picsum.photos/800/600?random=1', 'https://picsum.photos/800/600?random=101', 'https://picsum.photos/800/600?random=102'],
     gallery: [
       'https://picsum.photos/800/600?random=101',
       'https://picsum.photos/800/600?random=102',
@@ -55,6 +56,7 @@ const MOCK_ATTRACTIONS: Attraction[] = [
     region: '北京市 东城区',
     tags: ['History', 'Culture', 'Architecture'],
     imageUrl: 'https://picsum.photos/800/600?random=2',
+    imageUrls: ['https://picsum.photos/800/600?random=2', 'https://picsum.photos/800/600?random=201'],
     gallery: [
       'https://picsum.photos/800/600?random=201',
       'https://picsum.photos/800/600?random=202'
@@ -74,6 +76,7 @@ const MOCK_ATTRACTIONS: Attraction[] = [
     region: '浙江省 杭州市',
     tags: ['Nature', 'History', 'Water'],
     imageUrl: 'https://picsum.photos/800/600?random=3',
+    imageUrls: ['https://picsum.photos/800/600?random=3', 'https://picsum.photos/800/600?random=301'],
     gallery: ['https://picsum.photos/800/600?random=301'],
     openHours: '24 Hours',
     drivingTips: 'Traffic restrictions on weekends based on license plates.',
@@ -90,6 +93,7 @@ const MOCK_ATTRACTIONS: Attraction[] = [
     region: '四川省 阿坝州',
     tags: ['Nature', 'Hiking', 'Photography'],
     imageUrl: 'https://picsum.photos/800/600?random=4',
+    imageUrls: ['https://picsum.photos/800/600?random=4', 'https://picsum.photos/800/600?random=401', 'https://picsum.photos/800/600?random=402'],
     gallery: [
       'https://picsum.photos/800/600?random=401',
       'https://picsum.photos/800/600?random=402',
@@ -111,6 +115,7 @@ const MOCK_ATTRACTIONS: Attraction[] = [
     region: '四川省 成都市',
     tags: ['Culture', 'Hiking', 'Mountain'],
     imageUrl: 'https://picsum.photos/800/600?random=5',
+    imageUrls: ['https://picsum.photos/800/600?random=5'],
     openHours: '08:00 - 17:30',
     drivingTips: 'Take Chengguan Expressway. Parking lot is 2km from gate (shuttle available).',
     status: 'active'
@@ -128,7 +133,8 @@ const MOCK_PRODUCTS: Product[] = [
     description: 'Soft and cuddly panda plush.',
     price: 25.00,
     stock: 100,
-    imageUrl: 'https://picsum.photos/400/400?random=10'
+    imageUrl: 'https://picsum.photos/400/400?random=10',
+    imageUrls: ['https://picsum.photos/400/400?random=10']
   },
   {
     id: 'p2',
@@ -140,14 +146,15 @@ const MOCK_PRODUCTS: Product[] = [
     description: 'Traditional hand fan made of bamboo.',
     price: 12.50,
     stock: 50,
-    imageUrl: 'https://picsum.photos/400/400?random=11'
+    imageUrl: 'https://picsum.photos/400/400?random=11',
+    imageUrls: ['https://picsum.photos/400/400?random=11']
   }
 ];
 
 // Seed some initial users if not present
 const INITIAL_USERS: User[] = [
   { id: 'admin1', username: 'Admin User', email: 'admin@test.com', role: UserRole.ADMIN, status: 'active' },
-  { id: 'm1', username: 'Merchant User', email: 'merchant@test.com', role: UserRole.MERCHANT, status: 'active', qualificationUrl: 'https://picsum.photos/200/300' },
+  { id: 'm1', username: 'Merchant User', email: 'merchant@test.com', role: UserRole.MERCHANT, status: 'active', qualificationUrl: 'https://picsum.photos/200/300', qualificationUrls: ['https://picsum.photos/200/300'] },
   { id: 'u1', username: 'Traveler User', email: 'user@test.com', role: UserRole.TRAVELER, status: 'active' },
 ];
 
@@ -176,6 +183,12 @@ export const register = async (userData: Partial<User>, password: string): Promi
 
   // Merchants start as pending, others as active
   const status = userData.role === UserRole.MERCHANT ? 'pending' : 'active';
+  
+  // Handle multiple qualification URLs
+  const qualificationUrls = userData.qualificationUrls || [];
+  if (userData.qualificationUrl && qualificationUrls.length === 0) {
+      qualificationUrls.push(userData.qualificationUrl);
+  }
 
   const newUser: User = {
     id: `u-${Date.now()}`,
@@ -183,7 +196,8 @@ export const register = async (userData: Partial<User>, password: string): Promi
     email: userData.email!,
     role: userData.role || UserRole.TRAVELER,
     status: status,
-    qualificationUrl: userData.qualificationUrl, // Store the license image URL
+    qualificationUrl: qualificationUrls[0], // Primary
+    qualificationUrls: qualificationUrls,
     token: `mock-jwt-new`
   };
 
@@ -260,6 +274,14 @@ export const createAttraction = async (attractionData: Partial<Attraction>): Pro
     // Default status is 'active' if not specified (e.g. created by Admin)
     // If created by User, it should be passed as 'pending'
     const status = attractionData.status || 'active';
+    
+    // Handle images
+    const imageUrls = attractionData.imageUrls || [];
+    if (attractionData.imageUrl && imageUrls.length === 0) imageUrls.push(attractionData.imageUrl);
+    const primaryImage = imageUrls.length > 0 ? imageUrls[0] : 'https://picsum.photos/800/600?random=99';
+    // Gallery excludes first image usually, or includes all. Let's make gallery = all for simplicity in UI, or slice.
+    // Existing logic used gallery separate from imageUrl. Let's merge: imageUrl = [0], gallery = [1..n]
+    const gallery = imageUrls.length > 1 ? imageUrls.slice(1) : [];
 
     const newAttraction: Attraction = {
         id: `attr-${Date.now()}`,
@@ -271,8 +293,9 @@ export const createAttraction = async (attractionData: Partial<Attraction>): Pro
         county: attractionData.county!,
         region: `${attractionData.province} ${attractionData.city}`,
         tags: attractionData.tags || [],
-        imageUrl: attractionData.imageUrl || 'https://picsum.photos/800/600?random=99',
-        gallery: attractionData.gallery || [],
+        imageUrl: primaryImage,
+        imageUrls: imageUrls,
+        gallery: gallery,
         openHours: attractionData.openHours,
         drivingTips: attractionData.drivingTips,
         status: status,
@@ -289,6 +312,13 @@ export const updateAttraction = async (id: string, updates: Partial<Attraction>)
     if (index === -1) return { success: false, message: 'Attraction not found' };
     
     const updatedAttraction = { ...attractions[index], ...updates };
+    
+    // Sync images if imageUrls is updated
+    if (updates.imageUrls) {
+        updatedAttraction.imageUrl = updates.imageUrls[0];
+        updatedAttraction.gallery = updates.imageUrls.slice(1);
+    }
+
     attractions[index] = updatedAttraction;
     setStorage('mock_attractions', attractions);
     return { success: true, data: updatedAttraction };
@@ -319,13 +349,18 @@ export const getPosts = async (attractionId?: string): Promise<ApiResponse<Post[
 
 export const createPost = async (postData: Partial<Post>): Promise<ApiResponse<Post>> => {
   await delay(DELAY_MS);
+  
+  const imageUrls = postData.imageUrls || [];
+  if (postData.imageUrl && imageUrls.length === 0) imageUrls.push(postData.imageUrl);
+
   const newPost: Post = {
     id: `post-${Date.now()}`,
     attractionId: postData.attractionId!,
     userId: postData.userId!,
     username: postData.username!,
     content: postData.content!,
-    imageUrl: postData.imageUrl,
+    imageUrl: imageUrls[0], // Legacy support
+    imageUrls: imageUrls,
     rating: postData.rating,
     likes: 0,
     comments: [],
@@ -376,6 +411,10 @@ export const createProduct = async (product: Partial<Product>): Promise<ApiRespo
       if (attr) attractionName = attr.title;
   }
 
+  const imageUrls = product.imageUrls || [];
+  if (product.imageUrl && imageUrls.length === 0) imageUrls.push(product.imageUrl);
+  const primaryImage = imageUrls.length > 0 ? imageUrls[0] : `https://picsum.photos/400/400?random=${Date.now()}`;
+
   const newProduct: Product = {
     id: `prod-${Date.now()}`,
     merchantId: product.merchantId!,
@@ -386,7 +425,8 @@ export const createProduct = async (product: Partial<Product>): Promise<ApiRespo
     description: product.description!,
     price: product.price!,
     stock: product.stock!,
-    imageUrl: product.imageUrl || `https://picsum.photos/400/400?random=${Date.now()}`
+    imageUrl: primaryImage,
+    imageUrls: imageUrls
   };
   const products = getStorage<Product[]>('mock_products', MOCK_PRODUCTS);
   setStorage('mock_products', [...products, newProduct]);

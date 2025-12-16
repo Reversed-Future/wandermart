@@ -59,8 +59,17 @@ const uniqueTags = Array.from(new Set([
 // 1. HOME & ATTRACTIONS
 const HomePage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuth();
+  const { notify } = useNotification();
   const [attractions, setAttractions] = useState<Attraction[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Suggestion State
+  const [isSuggesting, setIsSuggesting] = useState(false);
+  const [suggestion, setSuggestion] = useState<Partial<Attraction>>({
+    title: '', description: '', address: '', province: '', city: '', county: '', tags: []
+  });
+  const [suggestionImage, setSuggestionImage] = useState<File | null>(null);
 
   // Read state from URL
   const query = searchParams.get('q') || '';
@@ -106,11 +115,48 @@ const HomePage = () => {
     setSearchParams({});
   };
 
+  const handleSuggestionSubmit = async () => {
+    if (!suggestion.title || !suggestion.description || !suggestion.province) {
+        notify("Please fill in the required fields.", "error");
+        return;
+    }
+
+    let imageUrl = '';
+    if (suggestionImage) {
+        imageUrl = await API.uploadFile(suggestionImage);
+    } else {
+        imageUrl = `https://picsum.photos/800/600?random=${Date.now()}`;
+    }
+
+    const res = await API.createAttraction({
+        ...suggestion,
+        imageUrl,
+        submittedBy: user?.username,
+        status: 'pending'
+    });
+
+    if (res.success) {
+        notify("Attraction submitted successfully! It is pending admin approval.", "success");
+        setIsSuggesting(false);
+        setSuggestion({ title: '', description: '', address: '', province: '', city: '', county: '', tags: [] });
+        setSuggestionImage(null);
+    }
+  };
+
   return (
     <div className="space-y-8">
-      <div className="text-center space-y-4 py-10 bg-blue-50 rounded-xl px-4">
+      <div className="text-center space-y-4 py-10 bg-blue-50 rounded-xl px-4 relative overflow-hidden">
         <h1 className="text-4xl font-extrabold text-blue-900">Discover China's Wonders</h1>
         <p className="text-lg text-blue-700 max-w-2xl mx-auto">Explore hidden gems across provinces, cities, and counties.</p>
+        
+        {/* Suggestion CTA */}
+        {user && !isSuggesting && (
+            <div className="absolute top-4 right-4">
+                <Button variant="secondary" onClick={() => setIsSuggesting(true)} className="text-sm shadow-sm bg-white hover:bg-gray-100">
+                    <Icons.Plus /> Suggest Attraction
+                </Button>
+            </div>
+        )}
         
         {/* Search & Filter Controls */}
         <div className="max-w-4xl mx-auto space-y-4 mt-6">
@@ -177,6 +223,37 @@ const HomePage = () => {
           )}
         </div>
       </div>
+
+      {isSuggesting && (
+          <Card className="p-6 bg-white border border-blue-200 shadow-md">
+              <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold text-gray-800">Suggest a New Attraction</h3>
+                  <button onClick={() => setIsSuggesting(false)} className="text-gray-400 hover:text-gray-600">×</button>
+              </div>
+              <div className="grid md:grid-cols-2 gap-4">
+                  <Input label="Title *" value={suggestion.title} onChange={e => setSuggestion({...suggestion, title: e.target.value})} />
+                  <Input label="Address" value={suggestion.address} onChange={e => setSuggestion({...suggestion, address: e.target.value})} />
+                  
+                  {/* Reuse static logic for simple dropdowns for demo */}
+                  <Input label="Province *" value={suggestion.province} onChange={e => setSuggestion({...suggestion, province: e.target.value})} placeholder="e.g. 四川省" />
+                  <Input label="City" value={suggestion.city} onChange={e => setSuggestion({...suggestion, city: e.target.value})} placeholder="e.g. 成都市" />
+                  <Input label="County" value={suggestion.county} onChange={e => setSuggestion({...suggestion, county: e.target.value})} />
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Upload Photo</label>
+                    <input type="file" onChange={e => setSuggestionImage(e.target.files?.[0] || null)} className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                  </div>
+
+                  <div className="md:col-span-2">
+                      <Textarea label="Description *" value={suggestion.description} onChange={e => setSuggestion({...suggestion, description: e.target.value})} />
+                  </div>
+              </div>
+              <div className="mt-4 flex justify-end gap-2">
+                  <Button variant="ghost" onClick={() => setIsSuggesting(false)}>Cancel</Button>
+                  <Button onClick={handleSuggestionSubmit}>Submit for Review</Button>
+              </div>
+          </Card>
+      )}
 
       <div>
         <h2 className="text-2xl font-bold mb-6 text-gray-800">
@@ -926,7 +1003,8 @@ const AdminDashboard = () => {
   const [reports, setReports] = useState<Post[]>([]);
   const [pendingMerchants, setPendingMerchants] = useState<User[]>([]);
   const [attractions, setAttractions] = useState<Attraction[]>([]);
-  const [activeTab, setActiveTab] = useState<'content' | 'users' | 'attractions'>('content');
+  const [pendingAttractions, setPendingAttractions] = useState<Attraction[]>([]);
+  const [activeTab, setActiveTab] = useState<'content' | 'users' | 'attractions' | 'approvals'>('content');
   const { notify, confirm } = useNotification();
 
   // Attraction Form State
@@ -938,6 +1016,7 @@ const AdminDashboard = () => {
     API.getReportedContent().then(res => res.data && setReports(res.data));
     API.getPendingMerchants().then(res => res.data && setPendingMerchants(res.data));
     API.getAttractions({}).then(res => res.data && setAttractions(res.data));
+    API.getPendingAttractions().then(res => res.data && setPendingAttractions(res.data));
   }, []);
 
   const handleModeration = async (id: string, action: 'approve' | 'delete') => {
@@ -950,6 +1029,23 @@ const AdminDashboard = () => {
       await API.updateUserStatus(id, status);
       setPendingMerchants(pendingMerchants.filter(u => u.id !== id));
       notify(`User ${status === 'active' ? 'Approved' : 'Rejected'}`, status === 'active' ? "success" : "info");
+  };
+
+  const handleAttractionApproval = async (id: string, action: 'approve' | 'reject') => {
+      if (action === 'approve') {
+          const res = await API.updateAttraction(id, { status: 'active' });
+          if (res.success && res.data) {
+              setPendingAttractions(pendingAttractions.filter(a => a.id !== id));
+              setAttractions([...attractions, res.data]);
+              notify("Attraction approved and published", "success");
+          }
+      } else {
+          confirm("Reject this attraction submission? It will be deleted.", async () => {
+              await API.deleteAttraction(id);
+              setPendingAttractions(pendingAttractions.filter(a => a.id !== id));
+              notify("Submission rejected", "info");
+          });
+      }
   };
 
   const handleSaveAttraction = async () => {
@@ -1012,10 +1108,16 @@ const AdminDashboard = () => {
               Merchant Approvals ({pendingMerchants.length})
           </button>
           <button 
+            className={`pb-2 px-1 whitespace-nowrap ${activeTab === 'approvals' ? 'border-b-2 border-blue-600 font-bold text-blue-600' : 'text-gray-600'}`}
+            onClick={() => setActiveTab('approvals')}
+          >
+              Attraction Approvals ({pendingAttractions.length})
+          </button>
+          <button 
             className={`pb-2 px-1 whitespace-nowrap ${activeTab === 'attractions' ? 'border-b-2 border-blue-600 font-bold text-blue-600' : 'text-gray-600'}`}
             onClick={() => setActiveTab('attractions')}
           >
-              Attractions
+              All Attractions
           </button>
       </div>
 
@@ -1071,6 +1173,32 @@ const AdminDashboard = () => {
                                           <Button onClick={() => handleMerchantApproval(user.id, 'active')} className="bg-green-600 hover:bg-green-700">Approve Merchant</Button>
                                           <Button onClick={() => handleMerchantApproval(user.id, 'rejected')} variant="danger">Reject Application</Button>
                                       </div>
+                                  </div>
+                              </div>
+                          </Card>
+                      ))}
+                  </div>
+              )}
+          </div>
+      )}
+
+      {activeTab === 'approvals' && (
+          <div>
+              {pendingAttractions.length === 0 ? <Alert type="success">No pending attraction submissions.</Alert> : (
+                  <div className="grid grid-cols-1 gap-6">
+                      {pendingAttractions.map(attr => (
+                          <Card key={attr.id} className="p-4 flex flex-col md:flex-row gap-4">
+                              <img src={attr.imageUrl} className="w-full md:w-48 h-32 object-cover rounded" alt={attr.title} />
+                              <div className="flex-grow">
+                                  <div className="flex justify-between items-start">
+                                      <h3 className="font-bold text-lg">{attr.title}</h3>
+                                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">Submitted by: {attr.submittedBy || 'Unknown'}</span>
+                                  </div>
+                                  <div className="text-sm text-gray-500 mb-2">{attr.province} {attr.city} {attr.county}</div>
+                                  <p className="text-sm text-gray-700 mb-3">{attr.description}</p>
+                                  <div className="flex gap-2">
+                                      <Button className="text-sm py-1 bg-green-600 hover:bg-green-700" onClick={() => handleAttractionApproval(attr.id, 'approve')}>Approve & Publish</Button>
+                                      <Button variant="danger" className="text-sm py-1" onClick={() => handleAttractionApproval(attr.id, 'reject')}>Reject</Button>
                                   </div>
                               </div>
                           </Card>

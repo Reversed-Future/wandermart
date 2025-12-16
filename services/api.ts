@@ -41,7 +41,8 @@ const MOCK_ATTRACTIONS: Attraction[] = [
       'https://picsum.photos/800/600?random=103'
     ],
     openHours: '07:30 - 18:00',
-    drivingTips: 'Accessible by Metro Line 3. Parking available at South Gate.'
+    drivingTips: 'Accessible by Metro Line 3. Parking available at South Gate.',
+    status: 'active'
   },
   {
     id: '2',
@@ -59,7 +60,8 @@ const MOCK_ATTRACTIONS: Attraction[] = [
       'https://picsum.photos/800/600?random=202'
     ],
     openHours: '08:30 - 17:00',
-    drivingTips: 'No public parking. Use public transport (Metro Line 1).'
+    drivingTips: 'No public parking. Use public transport (Metro Line 1).',
+    status: 'active'
   },
   {
     id: '3',
@@ -74,7 +76,8 @@ const MOCK_ATTRACTIONS: Attraction[] = [
     imageUrl: 'https://picsum.photos/800/600?random=3',
     gallery: ['https://picsum.photos/800/600?random=301'],
     openHours: '24 Hours',
-    drivingTips: 'Traffic restrictions on weekends based on license plates.'
+    drivingTips: 'Traffic restrictions on weekends based on license plates.',
+    status: 'active'
   },
   {
     id: '4',
@@ -94,7 +97,8 @@ const MOCK_ATTRACTIONS: Attraction[] = [
       'https://picsum.photos/800/600?random=404'
     ],
     openHours: '08:00 - 17:00',
-    drivingTips: 'Mountain roads. Careful driving required in winter.'
+    drivingTips: 'Mountain roads. Careful driving required in winter.',
+    status: 'active'
   },
   {
     id: '5',
@@ -108,7 +112,8 @@ const MOCK_ATTRACTIONS: Attraction[] = [
     tags: ['Culture', 'Hiking', 'Mountain'],
     imageUrl: 'https://picsum.photos/800/600?random=5',
     openHours: '08:00 - 17:30',
-    drivingTips: 'Take Chengguan Expressway. Parking lot is 2km from gate (shuttle available).'
+    drivingTips: 'Take Chengguan Expressway. Parking lot is 2km from gate (shuttle available).',
+    status: 'active'
   }
 ];
 
@@ -216,6 +221,9 @@ export const getAttractions = async (filters: AttractionFilters = {}): Promise<A
   // Use getStorage to ensure persistence for admin edits
   let data = getStorage<Attraction[]>('mock_attractions', MOCK_ATTRACTIONS);
   
+  // Only return active attractions for the general list
+  data = data.filter(a => a.status === 'active');
+
   if (filters.province) data = data.filter(a => a.province === filters.province);
   if (filters.city) data = data.filter(a => a.city === filters.city);
   if (filters.county) data = data.filter(a => a.county === filters.county);
@@ -229,9 +237,18 @@ export const getAttractions = async (filters: AttractionFilters = {}): Promise<A
   return { success: true, data };
 };
 
+export const getPendingAttractions = async (): Promise<ApiResponse<Attraction[]>> => {
+  await delay(DELAY_MS);
+  const data = getStorage<Attraction[]>('mock_attractions', MOCK_ATTRACTIONS);
+  const pending = data.filter(a => a.status === 'pending');
+  return { success: true, data: pending };
+};
+
 export const getAttractionById = async (id: string): Promise<ApiResponse<Attraction>> => {
   await delay(DELAY_MS);
   const data = getStorage<Attraction[]>('mock_attractions', MOCK_ATTRACTIONS);
+  // Allow viewing pending attractions if accessed directly (e.g. by admin or creator), 
+  // though in a real app this would be permission-gated.
   const attraction = data.find(a => a.id === id);
   return attraction ? { success: true, data: attraction } : { success: false, message: 'Not found' };
 };
@@ -239,6 +256,11 @@ export const getAttractionById = async (id: string): Promise<ApiResponse<Attract
 export const createAttraction = async (attractionData: Partial<Attraction>): Promise<ApiResponse<Attraction>> => {
     await delay(DELAY_MS);
     const attractions = getStorage<Attraction[]>('mock_attractions', MOCK_ATTRACTIONS);
+    
+    // Default status is 'active' if not specified (e.g. created by Admin)
+    // If created by User, it should be passed as 'pending'
+    const status = attractionData.status || 'active';
+
     const newAttraction: Attraction = {
         id: `attr-${Date.now()}`,
         title: attractionData.title!,
@@ -252,7 +274,9 @@ export const createAttraction = async (attractionData: Partial<Attraction>): Pro
         imageUrl: attractionData.imageUrl || 'https://picsum.photos/800/600?random=99',
         gallery: attractionData.gallery || [],
         openHours: attractionData.openHours,
-        drivingTips: attractionData.drivingTips
+        drivingTips: attractionData.drivingTips,
+        status: status,
+        submittedBy: attractionData.submittedBy
     };
     setStorage('mock_attractions', [newAttraction, ...attractions]);
     return { success: true, data: newAttraction };

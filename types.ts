@@ -29,6 +29,8 @@ export interface Attraction {
   gallery?: string[]; // Additional photos
   openHours?: string;
   drivingTips?: string;
+  status: 'active' | 'pending' | 'rejected'; // New field for approval workflow
+  submittedBy?: string; // New field to track who uploaded it
 }
 
 export interface Post {

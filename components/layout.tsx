@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth, useCart, useNotification } from '../App';
 import { Icons, Button, Input, Card, ImageUploader, Badge } from './ui';
-import { UserRole } from '../types';
+import { UserRole, NotificationMessage } from '../types';
 import * as API from '../services/api';
 
 const ProfileModal = ({ onClose }: { onClose: () => void }) => {
@@ -85,6 +85,108 @@ const ProfileModal = ({ onClose }: { onClose: () => void }) => {
     );
 };
 
+// --- Notification Dropdown Component ---
+const NotificationCenter = () => {
+    const { user } = useAuth();
+    const [messages, setMessages] = useState<NotificationMessage[]>([]);
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    // Close on click outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    // Poll for messages
+    const fetchMessages = async () => {
+        if (!user) return;
+        const res = await API.getMessages(user.id);
+        if (res.data) setMessages(res.data);
+    };
+
+    useEffect(() => {
+        fetchMessages();
+        const interval = setInterval(fetchMessages, 10000); // Poll every 10s
+        return () => clearInterval(interval);
+    }, [user]);
+
+    const handleMarkRead = async (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        await API.markMessageRead(id);
+        setMessages(messages.map(m => m.id === id ? { ...m, isRead: true } : m));
+    };
+
+    const handleMarkAllRead = async () => {
+        if (!user) return;
+        await API.markAllMessagesRead(user.id);
+        setMessages(messages.map(m => ({ ...m, isRead: true })));
+    };
+
+    const unreadCount = messages.filter(m => !m.isRead).length;
+
+    if (!user) return null;
+
+    return (
+        <div className="relative" ref={dropdownRef}>
+            <button 
+                className="relative p-2 text-gray-600 hover:text-blue-600 transition-colors"
+                onClick={() => setIsOpen(!isOpen)}
+            >
+                <Icons.Bell />
+                {unreadCount > 0 && (
+                    <span className="absolute top-1 right-1 h-2.5 w-2.5 bg-red-500 rounded-full ring-2 ring-white"></span>
+                )}
+            </button>
+
+            {isOpen && (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-100 py-2 z-50 animate-fade-in-down">
+                    <div className="px-4 py-2 border-b border-gray-50 flex justify-between items-center">
+                        <h3 className="font-bold text-gray-700">Notifications</h3>
+                        {unreadCount > 0 && (
+                            <button onClick={handleMarkAllRead} className="text-xs text-blue-600 hover:underline">
+                                Mark all read
+                            </button>
+                        )}
+                    </div>
+                    <div className="max-h-96 overflow-y-auto">
+                        {messages.length === 0 ? (
+                            <div className="px-4 py-8 text-center text-gray-500 text-sm">
+                                No notifications yet.
+                            </div>
+                        ) : (
+                            <div>
+                                {messages.map(msg => (
+                                    <div 
+                                        key={msg.id} 
+                                        className={`px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors ${!msg.isRead ? 'bg-blue-50/50' : ''}`}
+                                        onClick={() => !msg.isRead && handleMarkRead(msg.id, {} as any)}
+                                    >
+                                        <div className="flex justify-between items-start mb-1">
+                                            <span className={`text-sm font-semibold ${!msg.isRead ? 'text-gray-900' : 'text-gray-600'}`}>{msg.title}</span>
+                                            {!msg.isRead && <span className="h-2 w-2 bg-blue-500 rounded-full mt-1.5 flex-shrink-0"></span>}
+                                        </div>
+                                        <p className="text-xs text-gray-600 line-clamp-2 mb-1">{msg.content}</p>
+                                        <span className="text-[10px] text-gray-400">
+                                            {new Date(msg.createdAt).toLocaleDateString()} {new Date(msg.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, logout } = useAuth();
   const { cart } = useCart();
@@ -127,6 +229,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             </div>
 
             <div className="flex items-center gap-4">
+              {/* Notification Center */}
+              {user && <NotificationCenter />}
+
               {showShoppingFeatures && (
                 <Link to="/cart" className="relative text-gray-600 hover:text-blue-600">
                   <Icons.ShoppingBag />

@@ -35,6 +35,7 @@ export interface Attraction {
   drivingTips?: string;
   status: 'active' | 'pending' | 'rejected'; // New field for approval workflow
   submittedBy?: string; // New field to track who uploaded it
+  submittedById?: string; // ID of the user who submitted it
 }
 
 export interface Post {
@@ -85,6 +86,16 @@ export interface Order {
   total: number;
   status: 'pending' | 'shipped' | 'delivered' | 'cancelled';
   trackingNumber?: string;
+  createdAt: string;
+}
+
+export interface NotificationMessage {
+  id: string;
+  userId: string;
+  title: string;
+  content: string;
+  isRead: boolean;
+  type: 'info' | 'success' | 'warning' | 'error'; // For icon/color
   createdAt: string;
 }
 

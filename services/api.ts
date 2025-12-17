@@ -1,4 +1,4 @@
-import { Attraction, Post, Product, User, UserRole, Order, ApiResponse } from '../types';
+import { Attraction, Post, Product, User, UserRole, Order, ApiResponse, NotificationMessage } from '../types';
 
 /**
  * CONFIGURATION
@@ -158,6 +158,22 @@ const INITIAL_USERS: User[] = [
   { id: 'u1', username: 'Traveler User', email: 'user@test.com', role: UserRole.TRAVELER, status: 'active', avatarUrl: 'https://i.pravatar.cc/150?u=traveler' },
 ];
 
+// --- INTERNAL HELPERS ---
+
+const createNotification = (userId: string, title: string, content: string, type: NotificationMessage['type'] = 'info') => {
+  const msgs = getStorage<NotificationMessage[]>('mock_notifications', []);
+  const newMsg: NotificationMessage = {
+    id: `msg-${Date.now()}-${Math.random()}`,
+    userId,
+    title,
+    content,
+    isRead: false,
+    type,
+    createdAt: new Date().toISOString()
+  };
+  setStorage('mock_notifications', [newMsg, ...msgs]);
+};
+
 // --- AUTH SERVICES ---
 
 export const login = async (email: string, password: string): Promise<ApiResponse<User>> => {
@@ -232,6 +248,15 @@ export const updateUserStatus = async (userId: string, status: 'active' | 'rejec
   const users = getStorage<User[]>('mock_users', INITIAL_USERS);
   const updatedUsers = users.map(u => u.id === userId ? { ...u, status } : u);
   setStorage('mock_users', updatedUsers);
+  
+  // NOTIFICATION
+  createNotification(
+    userId, 
+    'Account Status Update', 
+    `Your account application has been ${status}.`, 
+    status === 'active' ? 'success' : 'error'
+  );
+
   return { success: true, data: true };
 };
 
@@ -314,7 +339,8 @@ export const createAttraction = async (attractionData: Partial<Attraction>): Pro
         openHours: attractionData.openHours,
         drivingTips: attractionData.drivingTips,
         status: status,
-        submittedBy: attractionData.submittedBy
+        submittedBy: attractionData.submittedBy,
+        submittedById: attractionData.submittedById
     };
     setStorage('mock_attractions', [newAttraction, ...attractions]);
     return { success: true, data: newAttraction };
@@ -326,6 +352,7 @@ export const updateAttraction = async (id: string, updates: Partial<Attraction>)
     const index = attractions.findIndex(a => a.id === id);
     if (index === -1) return { success: false, message: 'Attraction not found' };
     
+    const oldStatus = attractions[index].status;
     const updatedAttraction = { ...attractions[index], ...updates };
     
     // Sync images if imageUrls is updated
@@ -336,12 +363,28 @@ export const updateAttraction = async (id: string, updates: Partial<Attraction>)
 
     attractions[index] = updatedAttraction;
     setStorage('mock_attractions', attractions);
+    
+    // NOTIFICATION
+    if (updatedAttraction.submittedById && oldStatus !== updatedAttraction.status) {
+        createNotification(
+            updatedAttraction.submittedById, 
+            'Attraction Status Update', 
+            `Your attraction "${updatedAttraction.title}" has been ${updatedAttraction.status}.`, 
+            updatedAttraction.status === 'active' ? 'success' : 'error'
+        );
+    }
+
     return { success: true, data: updatedAttraction };
 };
 
 export const deleteAttraction = async (id: string): Promise<ApiResponse<boolean>> => {
     await delay(DELAY_MS);
     let attractions = getStorage<Attraction[]>('mock_attractions', MOCK_ATTRACTIONS);
+    const target = attractions.find(a => a.id === id);
+    if (target && target.submittedById) {
+        createNotification(target.submittedById, 'Attraction Rejected', `Your attraction "${target.title}" was rejected and removed.`, 'error');
+    }
+    
     attractions = attractions.filter(a => a.id !== id);
     setStorage('mock_attractions', attractions);
     return { success: true, data: true };
@@ -413,12 +456,22 @@ export const deletePost = async (id: string): Promise<ApiResponse<boolean>> => {
   return { success: true, data: true };
 };
 
-export const reportPost = async (postId: string): Promise<ApiResponse<boolean>> => {
+export const reportPost = async (postId: string, reporterId?: string): Promise<ApiResponse<boolean>> => {
   await delay(DELAY_MS);
   // Updates status to 'reported', which removes it from getPosts() view but adds it to getReportedContent()
   const posts = getStorage<Post[]>('mock_posts', []);
   const updated = posts.map(p => p.id === postId ? { ...p, status: 'reported' as const } : p);
   setStorage('mock_posts', updated);
+  
+  if (reporterId) {
+    const reports = getStorage<Record<string, string[]>>('mock_reports', {});
+    const existing = reports[postId] || [];
+    if (!existing.includes(reporterId)) {
+        reports[postId] = [...existing, reporterId];
+        setStorage('mock_reports', reports);
+    }
+  }
+
   return { success: true, data: true };
 };
 
@@ -488,6 +541,14 @@ export const createOrder = async (orderData: Partial<Order>): Promise<ApiRespons
   };
   const orders = getStorage<Order[]>('mock_orders', []);
   setStorage('mock_orders', [newOrder, ...orders]);
+  
+  // NOTIFICATION: Notify Merchant(s)
+  // Get unique merchant IDs
+  const merchantIds = Array.from(new Set(newOrder.items.map(i => i.merchantId)));
+  merchantIds.forEach(mId => {
+      createNotification(mId, 'New Order Received', `You have a new order (ID: ${newOrder.id}) for $${newOrder.total}.`, 'success');
+  });
+
   return { success: true, data: newOrder };
 };
 
@@ -515,8 +576,14 @@ export const updateOrderStatus = async (orderId: string, status: Order['status']
   });
   
   if (!updatedOrder) return { success: false, message: 'Order not found' };
-  
   setStorage('mock_orders', updatedOrders);
+  
+  // NOTIFICATION: Notify Buyer
+  if (updatedOrder) {
+      const o = updatedOrder as Order;
+      createNotification(o.userId, 'Order Status Update', `Your order #${o.id.slice(-6)} is now ${status}.`, 'info');
+  }
+
   return { success: true, data: updatedOrder };
 };
 
@@ -532,6 +599,8 @@ export const getReportedContent = async (): Promise<ApiResponse<Post[]>> => {
 export const moderateContent = async (id: string, action: 'approve' | 'delete'): Promise<ApiResponse<boolean>> => {
   await delay(DELAY_MS);
   let posts = getStorage<Post[]>('mock_posts', []);
+  const post = posts.find(p => p.id === id);
+
   if (action === 'delete') {
     posts = posts.filter(p => p.id !== id);
   } else {
@@ -539,7 +608,50 @@ export const moderateContent = async (id: string, action: 'approve' | 'delete'):
     posts = posts.map(p => p.id === id ? { ...p, status: 'active' as const } : p);
   }
   setStorage('mock_posts', posts);
+
+  // NOTIFICATION
+  if (post) {
+      // 1. Notify Author
+      createNotification(
+          post.userId, 
+          'Content Moderation', 
+          `Your review on attraction ${post.attractionId} has been ${action === 'delete' ? 'removed due to violations' : 'approved and restored'}.`,
+          action === 'delete' ? 'error' : 'success'
+      );
+      
+      // 2. Notify Reporters
+      const reports = getStorage<Record<string, string[]>>('mock_reports', {});
+      const reporterIds = reports[id] || [];
+      reporterIds.forEach(uid => {
+          createNotification(uid, 'Report Update', `A review you reported has been ${action === 'delete' ? 'removed' : 'reviewed and kept'}.`, 'info');
+      });
+  }
+
   return { success: true, data: true };
+};
+
+// --- NOTIFICATION SERVICES ---
+
+export const getMessages = async (userId: string): Promise<ApiResponse<NotificationMessage[]>> => {
+  // Simulate delay occasionally or fast
+  // await delay(200); 
+  const msgs = getStorage<NotificationMessage[]>('mock_notifications', []);
+  const myMsgs = msgs.filter(m => m.userId === userId);
+  return { success: true, data: myMsgs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) };
+};
+
+export const markMessageRead = async (messageId: string): Promise<ApiResponse<boolean>> => {
+  const msgs = getStorage<NotificationMessage[]>('mock_notifications', []);
+  const updated = msgs.map(m => m.id === messageId ? { ...m, isRead: true } : m);
+  setStorage('mock_notifications', updated);
+  return { success: true, data: true };
+};
+
+export const markAllMessagesRead = async (userId: string): Promise<ApiResponse<boolean>> => {
+    const msgs = getStorage<NotificationMessage[]>('mock_notifications', []);
+    const updated = msgs.map(m => m.userId === userId ? { ...m, isRead: true } : m);
+    setStorage('mock_notifications', updated);
+    return { success: true, data: true };
 };
 
 export const uploadFile = async (file: File): Promise<string> => {

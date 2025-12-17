@@ -126,6 +126,7 @@ const HomePage = () => {
         ...suggestion,
         imageUrls: suggestionImages,
         submittedBy: user?.username,
+        submittedById: user?.id,
         status: 'pending'
     });
 
@@ -384,7 +385,7 @@ const AttractionDetail = () => {
 
   const handleReport = (postId: string) => {
     confirm("Report this review? It will be submitted for admin moderation.", async () => {
-      await API.reportPost(postId);
+      await API.reportPost(postId, user?.id);
       setPosts(posts.filter(p => p.id !== postId));
       notify("Review reported. It has been hidden and sent to admins for review.", "info");
     });

@@ -141,20 +141,22 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               {user ? (
                 <div className="hidden md:flex items-center gap-4">
                   <div 
-                      className="flex flex-col items-end cursor-pointer hover:bg-gray-50 px-2 py-1 rounded transition-colors"
+                      className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded-lg transition-colors"
                       onClick={() => setIsProfileOpen(true)}
                   >
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-800">{user.username}</span>
+                    <div className="flex flex-col items-end">
+                        <span className="text-sm font-semibold text-gray-800 leading-tight">{user.username}</span>
+                        <span className="text-xs text-gray-500 capitalize leading-tight">{user.role}</span>
+                    </div>
+                    <div className="h-9 w-9">
                         {user.avatarUrl ? (
-                            <img src={user.avatarUrl} alt="Avatar" className="w-8 h-8 rounded-full object-cover border border-gray-200" />
+                            <img src={user.avatarUrl} alt="Avatar" className="w-full h-full rounded-full object-cover border border-gray-200" />
                         ) : (
-                            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                            <div className="w-full h-full rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
                                 <Icons.User />
                             </div>
                         )}
                     </div>
-                    <span className="text-xs text-gray-500 capitalize mr-10">{user.role}</span>
                   </div>
                   <Button variant="secondary" onClick={handleLogout} className="text-sm">Logout</Button>
                 </div>

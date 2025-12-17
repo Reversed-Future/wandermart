@@ -328,6 +328,9 @@ const AttractionDetail = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   
+  // Gallery state
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+
   // New Review Form State
   const [newPostContent, setNewPostContent] = useState('');
   const [newRating, setNewRating] = useState(5);
@@ -351,6 +354,7 @@ const AttractionDetail = () => {
         if (postRes.data) setPosts(postRes.data);
         if (prodRes.data) setProducts(prodRes.data);
         setLoading(false);
+        setActiveImageIndex(0);
       });
     }
   }, [id]);
@@ -427,17 +431,59 @@ const AttractionDetail = () => {
   if (loading) return <div>Loading...</div>;
   if (!attraction) return <div>Not found</div>;
 
+  const allImages = attraction.imageUrls && attraction.imageUrls.length > 0 
+      ? attraction.imageUrls 
+      : [attraction.imageUrl, ...(attraction.gallery || [])];
+
+  const handlePrevImage = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setActiveImageIndex(prev => (prev === 0 ? allImages.length - 1 : prev - 1));
+  };
+
+  const handleNextImage = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setActiveImageIndex(prev => (prev === allImages.length - 1 ? 0 : prev + 1));
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       <div className="lg:col-span-2 space-y-8">
         <div>
-          <img src={attraction.imageUrl} alt={attraction.title} className="w-full h-80 object-cover rounded-xl shadow-sm mb-6" />
+          <div className="relative group mb-6 rounded-xl overflow-hidden shadow-sm">
+             <img src={allImages[activeImageIndex]} alt={attraction.title} className="w-full h-80 object-cover" />
+             
+             {allImages.length > 1 && (
+               <>
+                 <button 
+                   onClick={handlePrevImage}
+                   className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/70 focus:outline-none"
+                 >
+                   <Icons.ChevronLeft />
+                 </button>
+                 <button 
+                   onClick={handleNextImage}
+                   className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/70 focus:outline-none"
+                 >
+                   <Icons.ChevronRight />
+                 </button>
+                 <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
+                     {activeImageIndex + 1} / {allImages.length}
+                 </div>
+               </>
+             )}
+          </div>
           
           {/* Gallery Grid */}
-          {attraction.gallery && attraction.gallery.length > 0 && (
+          {allImages.length > 1 && (
              <div className="grid grid-cols-4 gap-2 mb-6">
-                {attraction.gallery.map((img, idx) => (
-                   <img key={idx} src={img} alt={`Gallery ${idx}`} className="w-full h-24 object-cover rounded cursor-pointer hover:opacity-90" />
+                {allImages.map((img, idx) => (
+                   <img 
+                     key={idx} 
+                     src={img} 
+                     alt={`Gallery ${idx}`} 
+                     onClick={() => setActiveImageIndex(idx)}
+                     className={`w-full h-24 object-cover rounded cursor-pointer hover:opacity-90 transition-all ${activeImageIndex === idx ? 'ring-2 ring-blue-500' : ''}`} 
+                   />
                 ))}
              </div>
           )}
